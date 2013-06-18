@@ -95,7 +95,12 @@ class BelongsToMany extends Relation {
 	 */
 	public function get($columns = array('*'))
 	{
-		$models = $this->query->getModels($this->getSelectColumns($columns));
+		// First we'll add the proper select columns onto the query so it is run with
+		// the proper columns. Then, we will get the results and hydrate out pivot
+		// models with the result of those columns as a separate model relation.
+		$select = $this->getSelectColumns($columns);
+
+		$models = $this->query->addSelect($select)->getModels();
 
 		$this->hydratePivotRelation($models);
 
@@ -111,6 +116,27 @@ class BelongsToMany extends Relation {
 	}
 
 	/**
+	 * Get a paginator for the "select" statement.
+	 *
+	 * @param  int    $perPage
+	 * @param  array  $columns
+	 * @return \Illuminate\Pagination\Paginator
+	 */
+	public function paginate($perPage = null, $columns = array('*'))
+	{
+		$this->query->addSelect($this->getSelectColumns($columns));
+
+		// When paginating results, we need to add the pivot columns to the query and
+		// then hydrate into the pivot objects once the results have been gathered
+		// from the database since this isn't performed by the Eloquent builder.
+		$pager = $this->query->paginate($perPage, $columns);
+
+		$this->hydratePivotRelation($pager->getItems());
+
+		return $pager;
+	}
+
+	/**
 	 * Hydrate the pivot table relationship on the models.
 	 *
 	 * @param  array  $models
@@ -123,9 +149,7 @@ class BelongsToMany extends Relation {
 		// will set the attributes, table, and connections on so it they be used.
 		foreach ($models as $model)
 		{
-			$values = $this->cleanPivotAttributes($model);
-
-			$pivot = $this->newExistingPivot($values);
+			$pivot = $this->newExistingPivot($this->cleanPivotAttributes($model));
 
 			$model->setRelation('pivot', $pivot);
 		}
@@ -453,9 +477,10 @@ class BelongsToMany extends Relation {
 	 * Sync the intermediate tables with a list of IDs.
 	 *
 	 * @param  array  $ids
+	 * @param  bool   $detaching
 	 * @return void
 	 */
-	public function sync(array $ids)
+	public function sync(array $ids, $detaching = true)
 	{
 		// First we need to attach any of the associated models that are not currently
 		// in this joining table. We'll spin through the given IDs, checking to see
@@ -469,7 +494,7 @@ class BelongsToMany extends Relation {
 		// Next, we will take the differences of the currents and given IDs and detach
 		// all of the entities that exist in the "current" array but are not in the
 		// the array of the IDs given to the method which will complete the sync.
-		if (count($detach) > 0)
+		if ($detaching and count($detach) > 0)
 		{
 			$this->detach($detach);
 		}
@@ -517,6 +542,9 @@ class BelongsToMany extends Relation {
 	{
 		foreach ($records as $id => $attributes)
 		{
+			// If the ID is not in the list of existing pivot IDs, we will insert a new pivot
+			// record, otherwise, we will just update this existing record on this joining
+			// table, so that the developers will easily update these records pain free.
 			if ( ! in_array($id, $current))
 			{
 				$this->attach($id, $attributes, $touch);
@@ -538,7 +566,10 @@ class BelongsToMany extends Relation {
 	 */
 	protected function updateExistingPivot($id, array $attributes, $touch)
 	{
-		$attributes = $this->setTimestampsOnAttach($attributes, true);
+		if (in_array($this->updatedAt(), $this->pivotColumns))
+		{
+			$attributes = $this->setTimestampsOnAttach($attributes, true);
+		}
 
 		$this->newPivotStatementForId($id)->update($attributes);
 
