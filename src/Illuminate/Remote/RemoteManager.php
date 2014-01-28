@@ -38,7 +38,7 @@ class RemoteManager {
 	 */
 	public function into($name)
 	{
-		if (is_string($name) or is_array($name))
+		if (is_string($name) || is_array($name))
 		{
 			return $this->connection($name);
 		}
@@ -125,7 +125,7 @@ class RemoteManager {
 	 */
 	protected function setOutput(Connection $connection)
 	{
-		$output = $this->app->runningInConsole() ? new ConsoleOutput : new NullOutput;
+		$output = php_sapi_name() == 'cli' ? new ConsoleOutput : new NullOutput;
 
 		$connection->setOutput($output);
 	}
@@ -135,12 +135,18 @@ class RemoteManager {
 	 *
 	 * @param  array  $config
 	 * @return array
+	 *
+	 * @throws \InvalidArgumentException
 	 */
 	protected function getAuth(array $config)
 	{
-		if (isset($config['key']) and trim($config['key']) != '')
+		if (isset($config['key']) && trim($config['key']) != '')
 		{
-			return array('key' => $config['key']);
+			return array('key' => $config['key'], 'keyphrase' => $config['keyphrase']);
+		}
+		elseif (isset($config['keytext']) && trim($config['keytext']) != '')
+		{
+			return array('keytext' => $config['keytext']);
 		}
 		elseif (isset($config['password']))
 		{
@@ -155,6 +161,8 @@ class RemoteManager {
 	 *
 	 * @param  string  $name
 	 * @return array
+	 *
+	 * @throws \InvalidArgumentException
 	 */
 	protected function getConfig($name)
 	{
@@ -170,9 +178,20 @@ class RemoteManager {
 	 *
 	 * @return string
 	 */
-	protected function getDefaultConnection()
+	public function getDefaultConnection()
 	{
 		return $this->app['config']['remote.default'];
+	}
+
+	/**
+	 * Set the default connection name.
+	 *
+	 * @param  string  $name
+	 * @return void
+	 */
+	public function setDefaultConnection($name)
+	{
+		$this->app['config']['remote.default'] = $name;
 	}
 
 	/**

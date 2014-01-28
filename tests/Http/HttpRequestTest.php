@@ -238,13 +238,31 @@ class HttpRequestTest extends PHPUnit_Framework_TestCase {
 	}
 
 
+	public function testAllInputReturnsNestedInputAndFiles()
+	{
+		$file = $this->getMock('Symfony\Component\HttpFoundation\File\UploadedFile', null, array(__FILE__, 'photo.jpg'));
+		$request = Request::create('/?boom=breeze', 'GET', array('foo' => array('bar' => 'baz')), array(), array('foo' => array('photo' => $file)));
+		$this->assertEquals(array('foo' => array('bar' => 'baz', 'photo' => $file), 'boom' => 'breeze'), $request->all());
+	}
+
+
 	public function testOldMethodCallsSession()
 	{
 		$request = Request::create('/', 'GET');
 		$session = m::mock('Illuminate\Session\Store');
 		$session->shouldReceive('getOldInput')->once()->with('foo', 'bar')->andReturn('boom');
-		$request->setSessionStore($session);
+		$request->setSession($session);
 		$this->assertEquals('boom', $request->old('foo', 'bar'));
+	}
+
+
+	public function testFormatReturnsAcceptableFormat()
+	{
+		$request = Request::create('/', 'GET', array(), array(), array(), array('HTTP_ACCEPT' => 'application/json'));
+		$this->assertEquals('json', $request->format());
+
+		$request = Request::create('/', 'GET', array(), array(), array(), array('HTTP_ACCEPT' => 'application/atom+xml'));
+		$this->assertEquals('atom', $request->format());
 	}
 
 }

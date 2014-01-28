@@ -100,13 +100,13 @@ class DatabaseEloquentHasOneTest extends PHPUnit_Framework_TestCase {
 		$relation = $this->getRelation();
 		$query = m::mock('Illuminate\Database\Eloquent\Builder');
 		$query->shouldReceive('select')->once()->with(m::type('Illuminate\Database\Query\Expression'));
-		$relation->getParent()->shouldReceive('getQualifiedKeyName')->andReturn('foo');
+		$relation->getParent()->shouldReceive('getTable')->andReturn('table');
 		$query->shouldReceive('where')->once()->with('table.foreign_key', '=', m::type('Illuminate\Database\Query\Expression'));
 		$relation->getParent()->shouldReceive('getQuery')->andReturn($parentQuery = m::mock('StdClass'));
 		$parentQuery->shouldReceive('getGrammar')->once()->andReturn($grammar = m::mock('StdClass'));
-		$grammar->shouldReceive('wrap')->once()->with('foo');
+		$grammar->shouldReceive('wrap')->once()->with('table.id');
 
-		$relation->getRelationCountQuery($query);
+		$relation->getRelationCountQuery($query, $query);
 	}
 
 
@@ -117,10 +117,10 @@ class DatabaseEloquentHasOneTest extends PHPUnit_Framework_TestCase {
 		$related = m::mock('Illuminate\Database\Eloquent\Model');
 		$builder->shouldReceive('getModel')->andReturn($related);
 		$parent = m::mock('Illuminate\Database\Eloquent\Model');
-		$parent->shouldReceive('getKey')->andReturn(1);
+		$parent->shouldReceive('getAttribute')->with('id')->andReturn(1);
 		$parent->shouldReceive('getCreatedAtColumn')->andReturn('created_at');
 		$parent->shouldReceive('getUpdatedAtColumn')->andReturn('updated_at');
-		return new HasOne($builder, $parent, 'table.foreign_key');
+		return new HasOne($builder, $parent, 'table.foreign_key', 'id');
 	}
 
 }

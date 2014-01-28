@@ -2,6 +2,15 @@
 
 class SupportHelpersTest extends PHPUnit_Framework_TestCase {
 
+	public function testArrayBuild()
+	{
+		$this->assertEquals(array('foo' => 'bar'), array_build(array('foo' => 'bar'), function($key, $value)
+		{
+			return array($key, $value);
+		}));
+	}
+
+
 	public function testArrayDot()
 	{
 		$array = array_dot(array('name' => 'taylor', 'languages' => array('php' => true)));
@@ -35,10 +44,11 @@ class SupportHelpersTest extends PHPUnit_Framework_TestCase {
 	}
 
 
-	public function testArrayPluck()
+	public function testArrayPluckWithArrayAndObjectValues()
 	{
-		$array = array(array('name' => 'taylor'), array('name' => 'dayle'));
+		$array = array((object) array('name' => 'taylor', 'email' => 'foo'), array('name' => 'dayle', 'email' => 'bar'));
 		$this->assertEquals(array('taylor', 'dayle'), array_pluck($array, 'name'));
+		$this->assertEquals(array('taylor' => 'foo', 'dayle' => 'bar'), array_pluck($array, 'email', 'name'));
 	}
 
 

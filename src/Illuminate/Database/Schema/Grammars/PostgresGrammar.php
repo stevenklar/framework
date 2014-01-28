@@ -37,6 +37,17 @@ class PostgresGrammar extends Grammar {
 	}
 
 	/**
+	 * Compile the query to determine the list of columns.
+	 *
+	 * @param  string  $table
+	 * @return string
+	 */
+	public function compileColumnExists($table)
+	{
+		return "select column_name from information_schema.columns where table_name = '$table'";
+	}
+
+	/**
 	 * Compile a create table command.
 	 *
 	 * @param  \Illuminate\Database\Schema\Blueprint  $blueprint
@@ -241,6 +252,28 @@ class PostgresGrammar extends Grammar {
 	}
 
 	/**
+	 * Create the column definition for a medium text type.
+	 *
+	 * @param  \Illuminate\Support\Fluent  $column
+	 * @return string
+	 */
+	protected function typeMediumText(Fluent $column)
+	{
+		return 'text';
+	}
+
+	/**
+	 * Create the column definition for a long text type.
+	 *
+	 * @param  \Illuminate\Support\Fluent  $column
+	 * @return string
+	 */
+	protected function typeLongText(Fluent $column)
+	{
+		return 'text';
+	}
+
+	/**
 	 * Create the column definition for a integer type.
 	 *
 	 * @param  \Illuminate\Support\Fluent  $column
@@ -307,6 +340,17 @@ class PostgresGrammar extends Grammar {
 	}
 
 	/**
+	 * Create the column definition for a double type.
+	 *
+	 * @param  \Illuminate\Support\Fluent  $column
+	 * @return string
+	 */
+	protected function typeDouble(Fluent $column)
+	{
+		return 'double precision';
+	}
+
+	/**
 	 * Create the column definition for a decimal type.
 	 *
 	 * @param  \Illuminate\Support\Fluent  $column
@@ -336,7 +380,9 @@ class PostgresGrammar extends Grammar {
 	 */
 	protected function typeEnum(Fluent $column)
 	{
-		return 'varchar(255)';
+		$allowed = array_map(function($a) { return "'".$a."'"; }, $column->allowed);
+
+		return "varchar(255) check ({$column->name} in (".implode(', ', $allowed)."))";
 	}
 
 	/**

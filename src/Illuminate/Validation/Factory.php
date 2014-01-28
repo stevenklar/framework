@@ -9,7 +9,7 @@ class Factory {
 	/**
 	 * The Translator implementation.
 	 *
-	 * @var \Symfony\Component\Translator\TranslatorInterface
+	 * @var \Symfony\Component\Translation\TranslatorInterface
 	 */
 	protected $translator;
 
@@ -42,6 +42,13 @@ class Factory {
 	protected $implicitExtensions = array();
 
 	/**
+	 * All of the fallback messages for custom rules.
+	 *
+	 * @var array
+	 */
+	protected $fallbackMessages = array();
+
+	/**
 	 * The Validator resolver instance.
 	 *
 	 * @var Closure
@@ -69,12 +76,12 @@ class Factory {
 	 * @param  array  $messages
 	 * @return \Illuminate\Validation\Validator
 	 */
-	public function make(array $data, array $rules, array $messages = array())
+	public function make(array $data, array $rules, array $messages = array(), array $customAttributes = array())
 	{
 		// The presence verifier is responsible for checking the unique and exists data
 		// for the validator. It is behind an interface so that multiple versions of
 		// it may be written besides database. We'll inject it into the validator.
-		$validator = $this->resolve($data, $rules, $messages);
+		$validator = $this->resolve($data, $rules, $messages, $customAttributes);
 
 		if ( ! is_null($this->verifier))
 		{
@@ -82,13 +89,26 @@ class Factory {
 		}
 
 		// Next we'll set the IoC container instance of the validator, which is used to
-		// resolves out class baesd validator extensions. If it's not set then these
+		// resolve out class based validator extensions. If it is not set then these
 		// types of extensions will not be possible on these validation instances.
 		if ( ! is_null($this->container))
 		{
 			$validator->setContainer($this->container);
 		}
 
+		$this->addExtensions($validator);
+
+		return $validator;
+	}
+
+	/**
+	 * Add the extensions to a validator instance.
+	 *
+	 * @param  \Illuminate\Validation\Validator  $validator
+	 * @return void
+	 */
+	protected function addExtensions($validator)
+	{
 		$validator->addExtensions($this->extensions);
 
 		// Next, we will add the implicit extensions, which are similar to the required
@@ -98,7 +118,7 @@ class Factory {
 
 		$validator->addImplicitExtensions($implicit);
 
-		return $validator;
+		$validator->setFallbackMessages($this->fallbackMessages);
 	}
 
 	/**
@@ -109,15 +129,15 @@ class Factory {
 	 * @param  array  $messages
 	 * @return \Illuminate\Validation\Validator
 	 */
-	protected function resolve($data, $rules, $messages)
+	protected function resolve($data, $rules, $messages, $customAttributes)
 	{
 		if (is_null($this->resolver))
 		{
-			return new Validator($this->translator, $data, $rules, $messages);
+			return new Validator($this->translator, $data, $rules, $messages, $customAttributes);
 		}
 		else
 		{
-			return call_user_func($this->resolver, $this->translator, $data, $rules, $messages);
+			return call_user_func($this->resolver, $this->translator, $data, $rules, $messages, $customAttributes);
 		}
 	}
 
@@ -126,23 +146,29 @@ class Factory {
 	 *
 	 * @param  string  $rule
 	 * @param  Closure|string  $extension
+	 * @param  string  $message
 	 * @return void
 	 */
-	public function extend($rule, $extension)
+	public function extend($rule, $extension, $message = null)
 	{
 		$this->extensions[$rule] = $extension;
+
+		if ($message) $this->fallbackMessages[snake_case($rule)] = $message;
 	}
 
 	/**
 	 * Register a custom implicit validator extension.
 	 *
-	 * @param  string  $rule
-	 * @param  Closure $extension
+	 * @param  string   $rule
+	 * @param  Closure  $extension
+	 * @param  string  $message
 	 * @return void
 	 */
-	public function extendImplicit($rule, Closure $extension)
+	public function extendImplicit($rule, Closure $extension, $message = null)
 	{
 		$this->implicitExtensions[$rule] = $extension;
+
+		if ($message) $this->fallbackMessages[snake_case($rule)] = $message;
 	}
 
 	/**

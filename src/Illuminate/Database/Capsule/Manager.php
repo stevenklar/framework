@@ -213,7 +213,7 @@ class Manager {
 	}
 
 	/**
-	 * Set the cache manager to bse used by connections.
+	 * Set the cache manager to be used by connections.
 	 *
 	 * @param  \Illuminate\Cache\CacheManager  $cache
 	 * @return void
@@ -242,6 +242,18 @@ class Manager {
 	public function setContainer(Container $container)
 	{
 		$this->container = $container;
+	}
+
+	/**
+	 * Dynamically pass methods to the default connection.
+	 *
+	 * @param  string  $method
+	 * @param  array   $parameters
+	 * @return mixed
+	 */
+	public static function __callStatic($method, $parameters)
+	{
+		return call_user_func_array(array(static::connection(), $method), $parameters);
 	}
 
 }

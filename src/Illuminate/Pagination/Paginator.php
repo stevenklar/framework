@@ -5,15 +5,17 @@ use ArrayAccess;
 use ArrayIterator;
 use IteratorAggregate;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Contracts\JsonableInterface;
+use Illuminate\Support\Contracts\ArrayableInterface;
 
-class Paginator implements ArrayAccess, Countable, IteratorAggregate {
+class Paginator implements ArrayableInterface, ArrayAccess, Countable, IteratorAggregate, JsonableInterface {
 
 	/**
-	 * The pagination environment.
+	 * The pagination factory.
 	 *
-	 * @var \Illuminate\Pagination\Environment
+	 * @var \Illuminate\Pagination\Factory
 	 */
-	protected $env;
+	protected $factory;
 
 	/**
 	 * The items being paginated.
@@ -72,20 +74,27 @@ class Paginator implements ArrayAccess, Countable, IteratorAggregate {
 	protected $query = array();
 
 	/**
+	 * The fragment to be appended to all URLs.
+	 *
+	 * @var string
+	 */
+	protected $fragment;
+
+	/**
 	 * Create a new Paginator instance.
 	 *
-	 * @param  \Illuminate\Pagination\Environment  $env
+	 * @param  \Illuminate\Pagination\Factory  $factory
 	 * @param  array  $items
 	 * @param  int    $total
 	 * @param  int    $perPage
 	 * @return void
 	 */
-	public function __construct(Environment $env, array $items, $total, $perPage)
+	public function __construct(Factory $factory, array $items, $total, $perPage)
 	{
-		$this->env = $env;
-		$this->total = $total;
 		$this->items = $items;
-		$this->perPage = $perPage;
+		$this->factory = $factory;
+		$this->total = (int) $total;
+		$this->perPage = (int) $perPage;
 	}
 
 	/**
@@ -109,7 +118,7 @@ class Paginator implements ArrayAccess, Countable, IteratorAggregate {
 	 */
 	protected function calculateCurrentAndLastPages()
 	{
-		$this->lastPage = ceil($this->total / $this->perPage);
+		$this->lastPage = (int) ceil($this->total / $this->perPage);
 
 		$this->currentPage = $this->calculateCurrentPage($this->lastPage);
 	}
@@ -134,12 +143,12 @@ class Paginator implements ArrayAccess, Countable, IteratorAggregate {
 	 */
 	protected function calculateCurrentPage($lastPage)
 	{
-		$page = $this->env->getCurrentPage();
+		$page = $this->factory->getCurrentPage();
 
 		// The page number will get validated and adjusted if it either less than one
 		// or greater than the last page available based on the count of the given
 		// items array. If it's greater than the last, we'll give back the last.
-		if (is_numeric($page) and $page > $lastPage)
+		if (is_numeric($page) && $page > $lastPage)
 		{
 			return $lastPage > 0 ? $lastPage : 1;
 		}
@@ -155,17 +164,18 @@ class Paginator implements ArrayAccess, Countable, IteratorAggregate {
 	 */
 	protected function isValidPageNumber($page)
 	{
-		return $page >= 1 and filter_var($page, FILTER_VALIDATE_INT) !== false;
+		return $page >= 1 && filter_var($page, FILTER_VALIDATE_INT) !== false;
 	}
 
 	/**
 	 * Get the pagination links view.
 	 *
+	 * @param  string  $view
 	 * @return \Illuminate\View\View
 	 */
-	public function links()
+	public function links($view = null)
 	{
-		return $this->env->getPaginationView($this);
+		return $this->factory->getPaginationView($this, $view);
 	}
 
 	/**
@@ -177,7 +187,7 @@ class Paginator implements ArrayAccess, Countable, IteratorAggregate {
 	public function getUrl($page)
 	{
 		$parameters = array(
-			$this->env->getPageName() => $page,
+			$this->factory->getPageName() => $page,
 		);
 
 		// If we have any extra query string key / value pairs that need to be added
@@ -188,7 +198,32 @@ class Paginator implements ArrayAccess, Countable, IteratorAggregate {
 			$parameters = array_merge($parameters, $this->query);
 		}
 
-		return $this->env->getCurrentUrl().'?'.http_build_query($parameters, null, '&');
+		$fragment = $this->buildFragment();
+
+		return $this->factory->getCurrentUrl().'?'.http_build_query($parameters, null, '&').$fragment;
+	}
+
+	/**
+	 * Get / set the URL fragment to be appended to URLs.
+	 *
+	 * @param  string|null  $fragment
+	 * @return \Illuminate\Pagination\Paginator|string
+	 */
+	public function fragment($fragment = null)
+	{
+		if (is_null($fragment)) return $this->fragment;
+
+		$this->fragment = $fragment; return $this;
+	}
+
+	/**
+	 * Build the full fragment portion of a URL.
+	 *
+	 * @return string
+	 */
+	protected function buildFragment()
+	{
+		return $this->fragment ? '#'.$this->fragment : '';
 	}
 
 	/**
@@ -238,11 +273,19 @@ class Paginator implements ArrayAccess, Countable, IteratorAggregate {
 	/**
 	 * Get the current page for the request.
 	 *
+	 * @param  int|null  $total
 	 * @return int
 	 */
-	public function getCurrentPage()
+	public function getCurrentPage($total = null)
 	{
-		return $this->currentPage;
+		if (is_null($total))
+		{
+			return $this->currentPage;
+		}
+		else
+		{
+			return min($this->currentPage, (int) ceil($total / $this->perPage));
+		}
 	}
 
 	/**
@@ -334,17 +377,17 @@ class Paginator implements ArrayAccess, Countable, IteratorAggregate {
 	*/
 	public function setBaseUrl($baseUrl)
 	{
-		$this->env->setBaseUrl($baseUrl);
+		$this->factory->setBaseUrl($baseUrl);
 	}
 
 	/**
-	 * Get the pagination environment.
+	 * Get the pagination factory.
 	 *
-	 * @return \Illuminate\Pagination\Environment
+	 * @return \Illuminate\Pagination\Factory
 	 */
-	public function getEnvironment()
+	public function getFactory()
 	{
-		return $this->env;
+		return $this->factory;
 	}
 
 	/**
@@ -420,6 +463,31 @@ class Paginator implements ArrayAccess, Countable, IteratorAggregate {
 	public function offsetUnset($key)
 	{
 		unset($this->items[$key]);
+	}
+
+	/**
+	 * Get the instance as an array.
+	 *
+	 * @return array
+	 */
+	public function toArray()
+	{
+		return array(
+			'total' => $this->total, 'per_page' => $this->perPage,
+			'current_page' => $this->currentPage, 'last_page' => $this->lastPage,
+			'from' => $this->from, 'to' => $this->to, 'data' => $this->getCollection()->toArray(),
+		);
+	}
+
+	/**
+	 * Convert the object to its JSON representation.
+	 *
+	 * @param  int  $options
+	 * @return string
+	 */
+	public function toJson($options = 0)
+	{
+		return json_encode($this->toArray(), $options);
 	}
 
 }

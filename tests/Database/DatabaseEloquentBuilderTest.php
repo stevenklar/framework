@@ -26,6 +26,21 @@ class DatabaseEloquentBuilderTest extends PHPUnit_Framework_TestCase {
 		$this->assertEquals('baz', $result);
 	}
 
+	public function testFindWithMany()
+	{
+		$query = m::mock('Illuminate\Database\Query\Builder');
+		$query->shouldReceive('whereIn')->once()->with('foo', array(1, 2));
+		$builder = $this->getMock('Illuminate\Database\Eloquent\Builder', array('get'), array($query));
+		$model = m::mock('Illuminate\Database\Eloquent\Model');
+		$model->shouldReceive('getKeyName')->once()->andReturn('foo');
+		$model->shouldReceive('getTable')->once()->andReturn('table');
+		$query->shouldReceive('from')->once()->with('table');
+		$builder->setModel($model);
+		$builder->expects($this->once())->method('get')->with($this->equalTo(array('column')))->will($this->returnValue('baz'));
+		$result = $builder->find(array(1, 2), array('column'));
+		$this->assertEquals('baz', $result);
+	}
+
 
 	public function testFirstMethod()
 	{
@@ -173,8 +188,10 @@ class DatabaseEloquentBuilderTest extends PHPUnit_Framework_TestCase {
 	public function testEagerLoadRelationsLoadTopLevelRelationships()
 	{
 		$builder = $this->getMock('Illuminate\Database\Eloquent\Builder', array('loadRelation'), $this->getMocks());
-		$builder->setEagerLoads(array('foo' => function() {}, 'foo.bar' => function() {}));
-		$builder->expects($this->once())->method('loadRelation')->with($this->equalTo(array('models')), $this->equalTo('foo'), $this->equalTo(function() {}))->will($this->returnValue(array('foo')));
+		$nop1 = function() {};
+		$nop2 = function() {};
+		$builder->setEagerLoads(array('foo' => $nop1, 'foo.bar' => $nop2));
+		$builder->expects($this->once())->method('loadRelation')->with($this->equalTo(array('models')), $this->equalTo('foo'), $this->equalTo($nop1))->will($this->returnValue(array('foo')));
 		$results = $builder->eagerLoadRelations(array('models'));
 
 		$this->assertEquals(array('foo'), $results);
@@ -186,9 +203,7 @@ class DatabaseEloquentBuilderTest extends PHPUnit_Framework_TestCase {
 		$builder = $this->getMock('Illuminate\Database\Eloquent\Builder', array('getRelation'), $this->getMocks());
 		$builder->setEagerLoads(array('orders' => function($query) { $_SERVER['__eloquent.constrain'] = $query; }));
 		$relation = m::mock('stdClass');
-		$relation->shouldReceive('getAndResetWheres')->once()->andReturn(array(array('wheres'), array('bindings')));
 		$relation->shouldReceive('addEagerConstraints')->once()->with(array('models'));
-		$relation->shouldReceive('mergeWheres')->once()->with(array('wheres'), array('bindings'));
 		$relation->shouldReceive('initRelation')->once()->with(array('models'), 'orders')->andReturn(array('models'));
 		$relation->shouldReceive('get')->once()->andReturn(array('results'));
 		$relation->shouldReceive('match')->once()->with(array('models'), array('results'), 'orders')->andReturn(array('models.matched'));

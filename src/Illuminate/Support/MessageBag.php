@@ -1,8 +1,8 @@
 <?php namespace Illuminate\Support;
 
 use Countable;
-use Illuminate\Support\Contracts\ArrayableInterface;
 use Illuminate\Support\Contracts\JsonableInterface;
+use Illuminate\Support\Contracts\ArrayableInterface;
 use Illuminate\Support\Contracts\MessageProviderInterface;
 
 class MessageBag implements ArrayableInterface, Countable, JsonableInterface, MessageProviderInterface {
@@ -76,7 +76,7 @@ class MessageBag implements ArrayableInterface, Countable, JsonableInterface, Me
 	{
 		$messages = (array) $this->messages;
 
-		return ! isset($messages[$key]) or ! in_array($message, $messages[$key]);
+		return ! isset($messages[$key]) || ! in_array($message, $messages[$key]);
 	}
 
 	/**

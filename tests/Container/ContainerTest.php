@@ -38,6 +38,16 @@ class ContainerContainerTest extends PHPUnit_Framework_TestCase {
 	}
 
 
+	public function testParametersCanOverrideDependencies()
+	{
+		$container = new Container;
+		$stub = new ContainerDependentStub($mock = $this->getMock('IContainerContractStub'));
+		$resolved = $container->make('ContainerNestedDependentStub', array($stub));
+		$this->assertTrue($resolved instanceof ContainerNestedDependentStub);
+		$this->assertEquals($mock, $resolved->inner->impl);
+	}
+
+
 	public function testSharedConcreteResolution()
 	{
 		$container = new Container;
@@ -194,14 +204,60 @@ class ContainerContainerTest extends PHPUnit_Framework_TestCase {
 	}
 
 
-	public function testResolvingCallbacksAreCalled()
+	public function testResolvingCallbacksAreCalledForSpecificAbstracts()
 	{
 		$container = new Container;
-		$container->resolving(function($object) { return $object->name = 'taylor'; });
+		$container->resolving('foo', function($object) { return $object->name = 'taylor'; });
 		$container->bind('foo', function() { return new StdClass; });
 		$instance = $container->make('foo');
 
 		$this->assertEquals('taylor', $instance->name);
+	}
+
+
+	public function testResolvingCallbacksAreCalled()
+	{
+		$container = new Container;
+		$container->resolvingAny(function($object) { return $object->name = 'taylor'; });
+		$container->bind('foo', function() { return new StdClass; });
+		$instance = $container->make('foo');
+
+		$this->assertEquals('taylor', $instance->name);
+	}
+
+	public function testUnsetRemoveBoundInstances()
+	{
+		$container = new Container;
+		$container->instance('object', new StdClass);
+		unset($container['object']);
+
+		$this->assertFalse($container->bound('object'));
+	}
+
+
+	public function testReboundListeners()
+	{
+		unset($_SERVER['__test.rebind']);
+
+		$container = new Container;
+		$container->bind('foo', function() {});
+		$container->rebinding('foo', function() { $_SERVER['__test.rebind'] = true; });
+		$container->bind('foo', function() {});
+
+		$this->assertTrue($_SERVER['__test.rebind']);
+	}
+
+
+	public function testReboundListenersOnInstances()
+	{
+		unset($_SERVER['__test.rebind']);
+
+		$container = new Container;
+		$container->instance('foo', function() {});
+		$container->rebinding('foo', function() { $_SERVER['__test.rebind'] = true; });
+		$container->instance('foo', function() {});
+
+		$this->assertTrue($_SERVER['__test.rebind']);
 	}
 
 }

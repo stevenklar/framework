@@ -1,7 +1,6 @@
 <?php namespace Illuminate\View\Compilers;
 
 use Closure;
-use Illuminate\Filesystem\Filesystem;
 
 class BladeCompiler extends Compiler implements CompilerInterface {
 
@@ -34,6 +33,7 @@ class BladeCompiler extends Compiler implements CompilerInterface {
 		'Language',
 		'SectionStart',
 		'SectionStop',
+		'SectionAppend',
 		'SectionOverwrite',
 	);
 
@@ -161,7 +161,7 @@ class BladeCompiler extends Compiler implements CompilerInterface {
 	{
 		$pattern = sprintf('/%s--((.|\s)*?)--%s/', $this->contentTags[0], $this->contentTags[1]);
 
-		return preg_replace($pattern, '<?php /* $1 */ ?>', $value);
+		return preg_replace($pattern, '<?php /*$1*/ ?>', $value);
 	}
 
 	/**
@@ -172,6 +172,13 @@ class BladeCompiler extends Compiler implements CompilerInterface {
 	 */
 	protected function compileEchos($value)
 	{
+		$difference = strlen($this->contentTags[0]) - strlen($this->escapedTags[0]);
+
+		if ($difference > 0)
+		{
+			return $this->compileEscapedEchos($this->compileRegularEchos($value));
+		}
+
 		return $this->compileRegularEchos($this->compileEscapedEchos($value));
 	}
 
@@ -183,9 +190,16 @@ class BladeCompiler extends Compiler implements CompilerInterface {
 	 */
 	protected function compileRegularEchos($value)
 	{
-		$pattern = sprintf('/%s\s*(.+?)\s*%s/s', $this->contentTags[0], $this->contentTags[1]);
+		$me = $this;
 
-		return preg_replace($pattern, '<?php echo $1; ?>', $value);
+		$pattern = sprintf('/(@)?%s\s*(.+?)\s*%s/s', $this->contentTags[0], $this->contentTags[1]);
+
+		$callback = function($matches) use ($me)
+		{
+			return $matches[1] ? substr($matches[0], 1) : '<?php echo '.$me->compileEchoDefaults($matches[2]).'; ?>';
+		};
+
+		return preg_replace_callback($pattern, $callback, $value);
 	}
 
 	/**
@@ -196,9 +210,27 @@ class BladeCompiler extends Compiler implements CompilerInterface {
 	 */
 	protected function compileEscapedEchos($value)
 	{
+		$me = $this;
+
 		$pattern = sprintf('/%s\s*(.+?)\s*%s/s', $this->escapedTags[0], $this->escapedTags[1]);
 
-		return preg_replace($pattern, '<?php echo e($1); ?>', $value);
+		$callback = function($matches) use ($me)
+		{
+			return '<?php echo e('.$me->compileEchoDefaults($matches[1]).'); ?>';
+		};
+
+		return preg_replace_callback($pattern, $callback, $value);
+	}
+
+	/**
+	 * Compile the default values for the echo statement.
+	 *
+	 * @param  string  $value
+	 * @return string
+	 */
+	public function compileEchoDefaults($value)
+	{
+		return preg_replace('/^(?=\$)(.+?)(?:\s+or\s+)(.+?)$/s', 'isset($1) ? $1 : $2', $value);
 	}
 
 	/**
@@ -365,6 +397,19 @@ class BladeCompiler extends Compiler implements CompilerInterface {
 		$pattern = $this->createPlainMatcher('endsection');
 
 		return preg_replace($pattern, '$1<?php $__env->stopSection(); ?>$2', $value);
+	}
+
+	/**
+	 * Compile Blade section append statements into valid PHP.
+	 *
+	 * @param  string  $value
+	 * @return string
+	 */
+	protected function compileSectionAppend($value)
+	{
+		$pattern = $this->createPlainMatcher('append');
+
+		return preg_replace($pattern, '$1<?php $__env->appendSection(); ?>$2', $value);
 	}
 
 	/**

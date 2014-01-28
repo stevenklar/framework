@@ -1,7 +1,6 @@
 <?php namespace Illuminate\Html;
 
 use Illuminate\Routing\UrlGenerator;
-use Illuminate\Html\HtmlBuilder as Html;
 use Illuminate\Session\Store as Session;
 
 class FormBuilder {
@@ -70,6 +69,13 @@ class FormBuilder {
 	protected $spoofedMethods = array('DELETE', 'PATCH', 'PUT');
 
 	/**
+	 * The types of inputs to not fill values on by default.
+	 *
+	 * @var array
+	 */
+	protected $skipValueTypes = array('file', 'password', 'checkbox', 'radio');
+
+	/**
 	 * Create a new form builder instance.
 	 *
 	 * @param  \Illuminate\Routing\UrlGenerator  $url
@@ -108,7 +114,7 @@ class FormBuilder {
 		// different method than it actually is, for convenience from the forms.
 		$append = $this->getAppendage($method);
 
-		if (isset($options['files']) and $options['files'])
+		if (isset($options['files']) && $options['files'])
 		{
 			$options['enctype'] = 'multipart/form-data';
 		}
@@ -142,6 +148,17 @@ class FormBuilder {
 		$this->model = $model;
 
 		return $this->open($options);
+	}
+
+	/**
+	 * Set the model instance on the form builder.
+	 *
+	 * @param  mixed  $model
+	 * @return void
+	 */
+	public function setModel($model)
+	{
+		$this->model = $model;
 	}
 
 	/**
@@ -217,7 +234,7 @@ class FormBuilder {
 		// in the model instance if one is set. Otherwise we will just use empty.
 		$id = $this->getIdAttribute($name, $options);
 
-		if ($type != 'file' and $type != 'password')
+		if ( ! in_array($type, $this->skipValueTypes))
 		{
 			$value = $this->getValueAttribute($name, $value);
 		}
@@ -281,6 +298,19 @@ class FormBuilder {
 	public function email($name, $value = null, $options = array())
 	{
 		return $this->input('email', $name, $value, $options);
+	}
+
+	/**
+	 * Create a url input field.
+	 *
+	 * @param  string  $name
+	 * @param  string  $value
+	 * @param  array   $options
+	 * @return string
+	 */
+	public function url($name, $value = null, $options = array())
+	{
+		return $this->input('url', $name, $value, $options);
 	}
 
 	/**
@@ -403,6 +433,58 @@ class FormBuilder {
 	}
 
 	/**
+	 * Create a select range field.
+	 *
+	 * @param  string  $name
+	 * @param  string  $begin
+	 * @param  string  $end
+	 * @param  string  $selected
+	 * @param  array   $options
+	 * @return string
+	 */
+	public function selectRange($name, $begin, $end, $selected = null, $options = array())
+	{
+		$range = array_combine($range = range($begin, $end), $range);
+
+		return $this->select($name, $range, $selected, $options);
+	}
+
+	/**
+	 * Create a select year field.
+	 *
+	 * @param  string  $name
+	 * @param  string  $begin
+	 * @param  string  $end
+	 * @param  string  $selected
+	 * @param  array   $options
+	 * @return string
+	 */
+	public function selectYear()
+	{
+		return call_user_func_array(array($this, 'selectRange'), func_get_args());
+	}
+
+	/**
+	 * Create a select month field.
+	 *
+	 * @param  string  $name
+	 * @param  string  $selected
+	 * @param  array   $options
+	 * @return string
+	 */
+	public function selectMonth($name, $selected = null, $options = array())
+	{
+		$months = array();
+
+		foreach (range(1, 12) as $month)
+		{
+			$months[$month] = strftime('%B', mktime(0, 0, 0, $month, 1));
+		}
+
+		return $this->select($name, $months, $selected, $options);
+	}
+
+	/**
 	 * Get the select option for the given value.
 	 *
 	 * @param  string  $display
@@ -410,7 +492,7 @@ class FormBuilder {
 	 * @param  string  $selected
 	 * @return string
 	 */
-	protected function getSelectOption($display, $value, $selected)
+	public function getSelectOption($display, $value, $selected)
 	{
 		if (is_array($display))
 		{
@@ -516,7 +598,7 @@ class FormBuilder {
 	 */
 	protected function checkable($type, $name, $value, $checked, $options)
 	{
-		if (is_null($checked)) $checked = $this->getCheckedState($type, $name, $value);
+		$checked = $this->getCheckedState($type, $name, $value, $checked);
 
 		if ($checked) $options['checked'] = 'checked';
 
@@ -529,13 +611,67 @@ class FormBuilder {
 	 * @param  string  $type
 	 * @param  string  $name
 	 * @param  mixed   $value
-	 * @return void
+	 * @param  bool    $checked
+	 * @return bool
 	 */
-	protected function getCheckedState($type, $name, $value)
+	protected function getCheckedState($type, $name, $value, $checked)
 	{
-		if ($type == 'checkbox') return (bool) $this->getValueAttribute($name);
+		switch ($type)
+		{
+			case 'checkbox':
+				return $this->getCheckboxCheckedState($name, $value, $checked);
+
+			case 'radio':
+				return $this->getRadioCheckedState($name, $value, $checked);
+
+			default:
+				return $this->getValueAttribute($name) == $value;
+		}
+	}
+
+	/**
+	 * Get the check state for a checkbox input.
+	 *
+	 * @param  string  $name
+	 * @param  mixed  $value
+	 * @param  bool  $checked
+	 * @return bool
+	 */
+	protected function getCheckboxCheckedState($name, $value, $checked)
+	{
+		if ( ! $this->oldInputIsEmpty() && is_null($this->old($name))) return false;
+
+		if ($this->missingOldAndModel($name)) return $checked;
+
+		$posted = $this->getValueAttribute($name);
+
+		return is_array($posted) ? in_array($value, $posted) : (bool) $posted;
+	}
+
+	/**
+	 * Get the check state for a radio input.
+	 *
+	 * @param  string  $name
+	 * @param  mixed  $value
+	 * @param  bool  $checked
+	 * @return bool
+	 */
+	protected function getRadioCheckedState($name, $value, $checked)
+	{
+		if ($this->missingOldAndModel($name)) return $checked;
 
 		return $this->getValueAttribute($name) == $value;
+	}
+
+	/**
+	 * Determine if old input or model input exists for a key.
+	 *
+	 * @param  string  $name
+	 * @return bool
+	 */
+	protected function missingOldAndModel($name)
+	{
+		return (is_null($this->old($name)) && is_null($this->getModelValueAttribute($name)));
 	}
 
 	/**
@@ -735,7 +871,7 @@ class FormBuilder {
 	 * @param  array   $attributes
 	 * @return string
 	 */
-	protected function getIdAttribute($name, $attributes)
+	public function getIdAttribute($name, $attributes)
 	{
 		if (array_key_exists('id', $attributes))
 		{
@@ -759,14 +895,14 @@ class FormBuilder {
 	{
 		if (is_null($name)) return $value;
 
-		if (isset($this->session) and $this->session->hasOldInput($name))
+		if ( ! is_null($this->old($name)))
 		{
-			return $this->session->getOldInput($name);
+			return $this->old($name);
 		}
 
 		if ( ! is_null($value)) return $value;
 
-		if (isset($this->model) and isset($this->model[$name]))
+		if (isset($this->model))
 		{
 			return $this->getModelValueAttribute($name);
 		}
@@ -782,12 +918,47 @@ class FormBuilder {
 	{
 		if (is_object($this->model))
 		{
-			return object_get($this->model, $name);
+			return object_get($this->model, $this->transformKey($name));
 		}
 		elseif (is_array($this->model))
 		{
-			return array_get($this->model, $name);
+			return array_get($this->model, $this->transformKey($name));
 		}
+	}
+
+	/**
+	 * Get a value from the session's old input.
+	 *
+	 * @param  string  $name
+	 * @return string
+	 */
+	public function old($name)
+	{
+		if (isset($this->session))
+		{
+			return $this->session->getOldInput($this->transformKey($name));
+		}
+	}
+
+	/**
+	 * Determine if the old input is empty.
+	 *
+	 * @return bool
+	 */
+	public function oldInputIsEmpty()
+	{
+		return (isset($this->session) && count($this->session->getOldInput()) == 0);
+	}
+
+	/**
+	 * Transform key from array to dot syntax.
+	 *
+	 * @param  string  $key
+	 * @return string
+	 */
+	protected function transformKey($key)
+	{
+		return str_replace(array('.', '[]', '[', ']'), array('_', '', '.', ''), $key);
 	}
 
 	/**
@@ -819,6 +990,8 @@ class FormBuilder {
 	 * @param  string  $method
 	 * @param  array   $parameters
 	 * @return mixed
+	 *
+	 * @throws \BadMethodCallException
 	 */
 	public function __call($method, $parameters)
 	{
